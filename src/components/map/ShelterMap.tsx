@@ -133,6 +133,7 @@ function MapInner({
       sessionStorage.setItem(MAP_POS_KEY, JSON.stringify({ longitude: c.lng, latitude: c.lat, zoom: z }))
     } catch { /* ignore */ }
     const b = map.getBounds()
+    if (!b) return
     onBoundsChange({
       getSouth: () => b.getSouth(),
       getWest: () => b.getWest(),
