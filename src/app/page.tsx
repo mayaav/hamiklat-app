@@ -5,7 +5,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Shelter } from '@/types'
 import ShelterCardCarousel from '@/components/shelter/ShelterCardCarousel'
-import ShelterSheet from '@/components/shelter/ShelterSheet'
+import ShelterSheet, { prefetchShelter } from '@/components/shelter/ShelterSheet'
 import { Input } from '@/components/ui/input'
 import { inferCategory } from '@/lib/shelterCategory'
 
@@ -87,6 +87,7 @@ export default function Home() {
   const [flyTarget, setFlyTarget] = useState<{ coords: [number, number]; seq: number } | undefined>()
   const flySeq = useRef(0)
   const [selectedShelterId, setSelectedShelterId] = useState<string | null>(null)
+  const [selectedShelter, setSelectedShelter] = useState<Shelter | null>(null)
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set(['all']))
   const [proximityPOIs, setProximityPOIs] = useState<{ coffee: [number, number][]; pharmacy: [number, number][] }>({ coffee: [], pharmacy: [] })
   const poiFetchedFor = useRef<{ coffee: string; pharmacy: string }>({ coffee: '', pharmacy: '' })
@@ -280,11 +281,17 @@ export default function Home() {
   }, [shelters, userLocation])
   const carouselShelters = applyFilters(baseShelters, activeFilters, proximityPOIs)
 
+  // Prefetch top 3 carousel shelters so the sheet opens instantly
+  useEffect(() => {
+    carouselShelters.slice(0, 3).forEach(s => prefetchShelter(s.id))
+  }, [carouselShelters])
+
   // Active shelter drives the highlighted map pin
   const activeShelter = carouselShelters[activeIndex] ?? null
 
   // Tapping a map pin or carousel card opens the bottom sheet
   const handleMapPinClick = useCallback((shelter: Shelter) => {
+    setSelectedShelter(shelter)
     setSelectedShelterId(shelter.id)
   }, [])
 
@@ -448,7 +455,7 @@ export default function Home() {
           activeIndex={activeIndex}
           filter={activeFilters.has('all') ? 'all' : [...activeFilters].join(',')}
           onActiveChange={setActiveIndex}
-          onViewDetail={s => setSelectedShelterId(s.id)}
+          onViewDetail={s => { setSelectedShelter(s); setSelectedShelterId(s.id) }}
           geoState={geoState}
           onRequestLocation={requestLocation}
         />
@@ -458,8 +465,9 @@ export default function Home() {
       {selectedShelterId && (
         <ShelterSheet
           shelterId={selectedShelterId}
+          initialShelter={selectedShelter ?? undefined}
           userLocation={userLocation}
-          onClose={() => setSelectedShelterId(null)}
+          onClose={() => { setSelectedShelterId(null); setSelectedShelter(null) }}
         />
       )}
     </div>

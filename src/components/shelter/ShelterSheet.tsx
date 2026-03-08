@@ -66,19 +66,35 @@ function Stars({ value, onChange }: { value: number; onChange?: (v: number) => v
 const COLLAPSED_H = 280   // px visible at bottom when collapsed
 const EXPANDED_TOP = 56   // px from top when fully expanded
 
+// ─── module-level cache (survives re-renders, cleared on page unload) ─────────
+
+interface CacheEntry { shelter: Shelter; comments: Comment[] }
+const cache = new Map<string, CacheEntry>()
+
+export function prefetchShelter(id: string) {
+  if (cache.has(id)) return
+  Promise.all([
+    fetch(`/api/shelters/${id}`).then(r => r.ok ? r.json() : null),
+    fetch(`/api/shelters/${id}/comments`).then(r => r.ok ? r.json() : []),
+  ]).then(([shelter, comments]) => {
+    if (shelter) cache.set(id, { shelter, comments })
+  }).catch(() => { /* silent */ })
+}
+
 // ─── main component ───────────────────────────────────────────────────────────
 
 interface Props {
   shelterId: string
+  initialShelter?: Shelter   // show immediately while full data loads
   userLocation: [number, number] | null
   onClose: () => void
 }
 
-export default function ShelterSheet({ shelterId, userLocation, onClose }: Props) {
+export default function ShelterSheet({ shelterId, initialShelter, userLocation, onClose }: Props) {
   // data
-  const [shelter, setShelter] = useState<Shelter | null>(null)
-  const [comments, setComments] = useState<Comment[]>([])
-  const [loading, setLoading] = useState(true)
+  const [shelter, setShelter] = useState<Shelter | null>(initialShelter ?? cache.get(shelterId)?.shelter ?? null)
+  const [comments, setComments] = useState<Comment[]>(cache.get(shelterId)?.comments ?? [])
+  const [loading, setLoading] = useState(!cache.has(shelterId))
 
   // sheet drag (DOM-direct for 60fps — no React re-renders during drag)
   const sheetRef  = useRef<HTMLDivElement>(null)
@@ -189,9 +205,9 @@ export default function ShelterSheet({ shelterId, userLocation, onClose }: Props
   // ── load data ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    setLoading(true)
-    setShelter(null)
-    setComments([])
+    const cached = cache.get(shelterId)
+
+    // Reset interactive state
     setPhotoIndex(0)
     setVerified(null)
     setMyRating(0)
@@ -199,21 +215,38 @@ export default function ShelterSheet({ shelterId, userLocation, onClose }: Props
     setReportSent(false)
     snapTo(collapsedOffset(), false)
 
+    // If cached: show instantly, still refresh photos/comments in background
+    if (cached) {
+      setShelter(cached.shelter)
+      setComments(cached.comments)
+      setLoading(false)
+    } else if (initialShelter) {
+      // Show the data we already have immediately, fetch full details in background
+      setShelter(initialShelter)
+      setLoading(false)
+    } else {
+      setShelter(null)
+      setComments([])
+      setLoading(true)
+    }
+
     async function load() {
       const [sRes, cRes] = await Promise.all([
         fetch(`/api/shelters/${shelterId}`),
         fetch(`/api/shelters/${shelterId}/comments`),
       ])
-      if (sRes.ok) {
-        const s: Shelter = await sRes.json()
+      const s: Shelter | null = sRes.ok ? await sRes.json() : null
+      const c: Comment[] = cRes.ok ? await cRes.json() : []
+      if (s) {
         if (userLocation) {
           const dLat = (userLocation[0] - s.lat) * 111320
           const dLng = (userLocation[1] - s.lng) * 111320 * Math.cos(s.lat * Math.PI / 180)
           s.distance = Math.sqrt(dLat * dLat + dLng * dLng)
         }
+        cache.set(shelterId, { shelter: s, comments: c })
         setShelter(s)
+        setComments(c)
       }
-      if (cRes.ok) setComments(await cRes.json())
       setLoading(false)
     }
     load()
