@@ -22,9 +22,11 @@ const FILTER_TAGS = [
   { id: 'schools',    label: '🏫 בתי ספר' },
   { id: 'malls',      label: '🛍 קניונים' },
   { id: 'mamad',      label: '🏠 ממ"ד' },
+  { id: 'coffee',     label: '☕ קפה' },
+  { id: 'pharmacy',   label: '💊 בית מרקחת' },
 ]
 
-function applyFilters(shelters: Shelter[], activeFilters: Set<string>): Shelter[] {
+function applyFilters(shelters: Shelter[], activeFilters: Set<string>, proximityPOIs?: { coffee: [number, number][]; pharmacy: [number, number][] }): Shelter[] {
   if (activeFilters.has('all') || activeFilters.size === 0) return shelters
   return shelters.filter(s => {
     if (activeFilters.has('open') && s.status === 'unverified' && s.verification_count === 0) return false
@@ -41,6 +43,22 @@ function applyFilters(shelters: Shelter[], activeFilters: Set<string>): Shelter[
     }
     if (activeFilters.has('malls') && inferCategory(s) !== 'shopping_mall') return false
     if (activeFilters.has('mamad') && s.shelter_type !== 'mamad') return false
+    if (activeFilters.has('coffee') && proximityPOIs) {
+      const near = proximityPOIs.coffee.some(([lat, lng]) => {
+        const dLat = (lat - s.lat) * 111320
+        const dLng = (lng - s.lng) * 111320 * Math.cos(s.lat * Math.PI / 180)
+        return Math.sqrt(dLat * dLat + dLng * dLng) < 150
+      })
+      if (!near) return false
+    }
+    if (activeFilters.has('pharmacy') && proximityPOIs) {
+      const near = proximityPOIs.pharmacy.some(([lat, lng]) => {
+        const dLat = (lat - s.lat) * 111320
+        const dLng = (lng - s.lng) * 111320 * Math.cos(s.lat * Math.PI / 180)
+        return Math.sqrt(dLat * dLat + dLng * dLng) < 150
+      })
+      if (!near) return false
+    }
     return true
   })
 }
@@ -69,6 +87,8 @@ export default function Home() {
   const [flyTarget, setFlyTarget] = useState<{ coords: [number, number]; seq: number } | undefined>()
   const flySeq = useRef(0)
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set(['all']))
+  const [proximityPOIs, setProximityPOIs] = useState<{ coffee: [number, number][]; pharmacy: [number, number][] }>({ coffee: [], pharmacy: [] })
+  const poiFetchedFor = useRef<{ coffee: string; pharmacy: string }>({ coffee: '', pharmacy: '' })
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<{ place_name: string; center: [number, number] }[]>([])
   const [showSearch, setShowSearch] = useState(false)
@@ -76,6 +96,23 @@ export default function Home() {
 
   const userPickedLocation = useRef(false)
   const lastBounds = useRef<{ south: number; west: number; north: number; east: number } | null>(null)
+
+  const fetchProximityPOIs = useCallback(async (type: 'coffee' | 'pharmacy') => {
+    const b = lastBounds.current
+    if (!b) return
+    const boundsKey = `${b.south},${b.west},${b.north},${b.east}`
+    if (poiFetchedFor.current[type] === boundsKey) return
+    poiFetchedFor.current[type] = boundsKey
+    const amenity = type === 'coffee' ? 'cafe' : 'pharmacy'
+    const query = `[out:json][timeout:8];node[amenity=${amenity}](${b.south},${b.west},${b.north},${b.east});out body;`
+    try {
+      const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: query })
+      if (!res.ok) return
+      const data = await res.json()
+      const coords: [number, number][] = (data.elements ?? []).map((el: { lat: number; lon: number }) => [el.lat, el.lon])
+      setProximityPOIs(prev => ({ ...prev, [type]: coords }))
+    } catch { /* silent */ }
+  }, [])
 
   const flyTo = useCallback((coords: [number, number]) => {
     flySeq.current += 1
@@ -110,6 +147,12 @@ export default function Home() {
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [loadShelters])
+
+  // Fetch proximity POIs when those filters are activated
+  useEffect(() => {
+    if (activeFilters.has('coffee')) fetchProximityPOIs('coffee')
+    if (activeFilters.has('pharmacy')) fetchProximityPOIs('pharmacy')
+  }, [activeFilters, fetchProximityPOIs])
 
   const computeNearest = useCallback((coords: [number, number], data: Shelter[]) => {
     const withDist = data
@@ -219,7 +262,7 @@ export default function Home() {
     }
     return shelters.slice(0, 20)
   }, [nearestShelters, shelters, userLocation])
-  const carouselShelters = applyFilters(baseShelters, activeFilters)
+  const carouselShelters = applyFilters(baseShelters, activeFilters, proximityPOIs)
 
   // Active shelter drives the highlighted map pin
   const activeShelter = carouselShelters[activeIndex] ?? null
