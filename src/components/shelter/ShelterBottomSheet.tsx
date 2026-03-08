@@ -101,7 +101,7 @@ function StatusLine({ shelter }: { shelter: Shelter }) {
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium text-sky-700">
         <span className="w-1.5 h-1.5 rounded-full bg-sky-500 inline-block" />
-        מאומת רשמית
+        מקור רשמי
       </span>
     )
   }

@@ -48,7 +48,7 @@ function navigateTo(shelter: Shelter) {
 
 function StatusDot({ shelter }: { shelter: Shelter }) {
   if (shelter.source === 'official')
-    return <span className="text-xs text-sky-600 font-medium">● מאומת רשמית</span>
+    return <span className="text-xs text-sky-600 font-medium">● מקור רשמי</span>
   if (shelter.status === 'verified')
     return <span className="text-xs text-emerald-600 font-medium">● אומת {relativeTime(shelter.updated_at)}</span>
   if (shelter.status === 'flagged')
@@ -141,12 +141,6 @@ export default function ShelterCardCarousel({
 
   return (
     <div className="absolute bottom-0 left-0 right-0 z-[999]">
-      {/* Soft gradient above cards */}
-      <div
-        className="pointer-events-none"
-        style={{ height: 48, background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.7))' }}
-      />
-
       <div className="bg-transparent">
         {/* Card carousel */}
         <div

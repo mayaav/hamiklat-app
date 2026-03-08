@@ -19,7 +19,7 @@ const REPORT_TYPES = [
   { value: 'locked', label: '🔒 נעול' },
   { value: 'inaccessible', label: '🚧 לא נגיש' },
   { value: 'dirty', label: '🗑 מלוכלך' },
-  { value: 'unsafe', label: '⚠️ לא בטוח' },
+  { value: 'unsafe', label: '⚠️ בעיית גישה' },
   { value: 'closed', label: '🚫 סגור לצמיתות' },
   { value: 'fake', label: '❌ לא קיים' },
   { value: 'other', label: 'אחר' },
@@ -525,7 +525,7 @@ export default function ShelterDetailPage() {
                 }`}
               >
                 <ThumbsDown size={16} />
-                לא בטוח
+                לא נמצא
               </button>
             </div>
           </div>
@@ -665,6 +665,14 @@ export default function ShelterDetailPage() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* ── DISCLAIMER FOOTER ─────────────────────────────────────────────────── */}
+      <div className="px-5 py-4 text-center">
+        <p className="text-[11px] text-gray-400 leading-relaxed">
+          המידע עשוי להיות קהילתי ואינו מובטח כמדויק.{' '}
+          <a href="/about" className="underline underline-offset-2 hover:text-gray-500">פרטים נוספים</a>
+        </p>
       </div>
 
       {/* ── STICKY BOTTOM ACTION BAR ──────────────────────────────────────────── */}

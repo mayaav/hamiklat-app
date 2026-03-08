@@ -82,7 +82,6 @@ export default function Home() {
   const [geoState, setGeoState] = useState<GeoState>('requesting')
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
   const [shelters, setShelters] = useState<Shelter[]>([])
-  const [nearestShelters, setNearestShelters] = useState<Shelter[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const [flyTarget, setFlyTarget] = useState<{ coords: [number, number]; seq: number } | undefined>()
   const flySeq = useRef(0)
@@ -148,17 +147,23 @@ export default function Home() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [loadShelters])
 
+  // Periodic refresh every 30s so newly added shelters appear without map interaction
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible' && lastBounds.current) {
+        loadShelters(lastBounds.current)
+      }
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [loadShelters])
+
   // Fetch proximity POIs when those filters are activated
   useEffect(() => {
     if (activeFilters.has('coffee')) fetchProximityPOIs('coffee')
     if (activeFilters.has('pharmacy')) fetchProximityPOIs('pharmacy')
   }, [activeFilters, fetchProximityPOIs])
 
-  const computeNearest = useCallback((coords: [number, number], data: Shelter[]) => {
-    const withDist = data
-      .map(s => ({ ...s, distance: haversine(coords[0], coords[1], s.lat, s.lng) }))
-      .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))
-    setNearestShelters(withDist.slice(0, 20))
+  const computeNearest = useCallback((_coords: [number, number], _data: Shelter[]) => {
     setActiveIndex(0)
   }, [])
 
@@ -253,7 +258,6 @@ export default function Home() {
 
   // Which shelters to show in carousel — prefer pre-computed nearest; fall back to on-the-fly sort
   const baseShelters = useMemo(() => {
-    if (nearestShelters.length > 0) return nearestShelters
     if (userLocation && shelters.length > 0) {
       return [...shelters]
         .map(s => ({ ...s, distance: haversine(userLocation[0], userLocation[1], s.lat, s.lng) }))
@@ -261,7 +265,7 @@ export default function Home() {
         .slice(0, 20)
     }
     return shelters.slice(0, 20)
-  }, [nearestShelters, shelters, userLocation])
+  }, [shelters, userLocation])
   const carouselShelters = applyFilters(baseShelters, activeFilters, proximityPOIs)
 
   // Active shelter drives the highlighted map pin
@@ -287,6 +291,16 @@ export default function Home() {
           onRecenter={userLocation ? () => flyTo(userLocation) : undefined}
         />
       </div>
+
+      {/* Info button — bottom left, above carousel */}
+      <button
+        onClick={() => router.push('/about')}
+        className="absolute bottom-[calc(var(--carousel-h,200px)+12px)] left-4 z-[999] w-8 h-8 rounded-full bg-white/90 backdrop-blur shadow-md flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors text-sm font-medium"
+        aria-label="אודות המפה"
+        style={{ bottom: 'calc(172px + 12px)' }}
+      >
+        ℹ
+      </button>
 
       {/* Top bar: search row + filter chips */}
       <div className="absolute top-0 left-0 right-0 z-[1000] px-4 pt-3 pb-2 flex flex-col gap-2">
