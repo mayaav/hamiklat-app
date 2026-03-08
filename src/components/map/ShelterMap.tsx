@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import Map, { Marker, useMap } from 'react-map-gl/mapbox'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import type { Shelter } from '@/types'
@@ -76,6 +76,7 @@ interface ShelterMapProps {
   onShelterClick: (shelter: Shelter) => void
   onBoundsChange: (bounds: { getSouth: () => number; getWest: () => number; getNorth: () => number; getEast: () => number }) => void
   onRecenter?: () => void
+  onLongPress?: (lat: number, lng: number) => void
 }
 
 const MAP_POS_KEY = 'mapLastPos'
@@ -112,9 +113,11 @@ function MapInner({
   onShelterClick,
   onBoundsChange,
   onRecenter,
+  onLongPress,
 }: ShelterMapProps) {
   const { current: map } = useMap()
   const prevSeq = useRef(-1)
+  const [dropPin, setDropPin] = useState<{ lat: number; lng: number } | null>(null)
 
   // Fly to target when seq changes
   useEffect(() => {
@@ -145,12 +148,41 @@ function MapInner({
   useEffect(() => {
     if (!map) return
     map.on('moveend', handleMoveEnd)
-    map.on('zoomend', handleMoveEnd)
     return () => {
       map.off('moveend', handleMoveEnd)
-      map.off('zoomend', handleMoveEnd)
     }
   }, [map, handleMoveEnd])
+
+  // Long press → drop pin
+  useEffect(() => {
+    if (!map || !onLongPress) return
+    let timer: ReturnType<typeof setTimeout>
+
+    const onTouchStart = (e: { lngLat: { lat: number; lng: number } }) => {
+      const { lat, lng } = e.lngLat
+      timer = setTimeout(() => setDropPin({ lat, lng }), 550)
+    }
+    const cancel = () => clearTimeout(timer)
+
+    // Desktop: right-click
+    const onContext = (e: { lngLat: { lat: number; lng: number }; preventDefault: () => void }) => {
+      e.preventDefault()
+      setDropPin({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+    }
+
+    map.on('touchstart', onTouchStart)
+    map.on('touchend',   cancel)
+    map.on('touchmove',  cancel)
+    map.on('contextmenu', onContext)
+
+    return () => {
+      clearTimeout(timer)
+      map.off('touchstart',   onTouchStart)
+      map.off('touchend',     cancel)
+      map.off('touchmove',    cancel)
+      map.off('contextmenu',  onContext)
+    }
+  }, [map, onLongPress])
 
   return (
     <>
@@ -218,6 +250,50 @@ function MapInner({
           >⊙</button>
         )}
       </div>
+
+      {/* Drop pin (long press) */}
+      {dropPin && (
+        <>
+          <Marker longitude={dropPin.lng} latitude={dropPin.lat} anchor="bottom">
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: '50%',
+                background: '#1c1c1c', border: '3px solid white',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18,
+              }}>📍</div>
+              <div style={{ width: 0, height: 0, borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: '10px solid #1c1c1c', marginTop: -1 }} />
+            </div>
+          </Marker>
+          {/* Confirm bubble */}
+          <Marker longitude={dropPin.lng} latitude={dropPin.lat} anchor="top" offset={[0, 10]}>
+            <div style={{
+              background: 'white', borderRadius: 16, padding: '10px 14px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column',
+              alignItems: 'center', gap: 8, minWidth: 160, direction: 'rtl',
+            }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: '#111', margin: 0 }}>הוסף מקלט כאן?</p>
+              <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                <button
+                  style={{
+                    flex: 1, height: 34, borderRadius: 10, background: '#1c1c1c', color: 'white',
+                    border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  }}
+                  onClick={() => { onLongPress?.(dropPin.lat, dropPin.lng); setDropPin(null) }}
+                >המשך</button>
+                <button
+                  style={{
+                    flex: 1, height: 34, borderRadius: 10, background: '#f4f4f4', color: '#555',
+                    border: 'none', fontSize: 13, cursor: 'pointer',
+                  }}
+                  onClick={() => setDropPin(null)}
+                >ביטול</button>
+              </div>
+            </div>
+          </Marker>
+        </>
+      )}
     </>
   )
 }

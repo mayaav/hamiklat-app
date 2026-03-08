@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Shelter } from '@/types'
 import ShelterCardCarousel from '@/components/shelter/ShelterCardCarousel'
+import ShelterSheet from '@/components/shelter/ShelterSheet'
 import { Input } from '@/components/ui/input'
 import { inferCategory } from '@/lib/shelterCategory'
 
@@ -85,6 +86,7 @@ export default function Home() {
   const [activeIndex, setActiveIndex] = useState(0)
   const [flyTarget, setFlyTarget] = useState<{ coords: [number, number]; seq: number } | undefined>()
   const flySeq = useRef(0)
+  const [selectedShelterId, setSelectedShelterId] = useState<string | null>(null)
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set(['all']))
   const [proximityPOIs, setProximityPOIs] = useState<{ coffee: [number, number][]; pharmacy: [number, number][] }>({ coffee: [], pharmacy: [] })
   const poiFetchedFor = useRef<{ coffee: string; pharmacy: string }>({ coffee: '', pharmacy: '' })
@@ -95,6 +97,8 @@ export default function Home() {
 
   const userPickedLocation = useRef(false)
   const lastBounds = useRef<{ south: number; west: number; north: number; east: number } | null>(null)
+  const loadAbort = useRef<AbortController | null>(null)
+  const boundsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const fetchProximityPOIs = useCallback(async (type: 'coffee' | 'pharmacy') => {
     const b = lastBounds.current
@@ -119,19 +123,25 @@ export default function Home() {
   }, [])
 
   const loadShelters = useCallback(async (bounds?: { south: number; west: number; north: number; east: number }): Promise<Shelter[]> => {
+    // Cancel any in-flight request so stale responses never overwrite fresh ones
+    loadAbort.current?.abort()
+    const ctrl = new AbortController()
+    loadAbort.current = ctrl
     try {
       const params = new URLSearchParams()
       if (bounds) {
         params.set('bbox', [bounds.south, bounds.west, bounds.north, bounds.east].join(','))
       }
-      const res = await fetch(`/api/shelters?${params}`)
+      const res = await fetch(`/api/shelters?${params}`, { signal: ctrl.signal })
       if (res.ok) {
         const data: Shelter[] = await res.json()
         setShelters(data)
         return data
       }
-    } catch (err) {
-      console.error('Failed to load shelters', err)
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        console.error('Failed to load shelters', err)
+      }
     }
     return []
   }, [])
@@ -253,7 +263,9 @@ export default function Home() {
   const handleBoundsChange = useCallback((bounds: { getSouth: () => number; getWest: () => number; getNorth: () => number; getEast: () => number }) => {
     const b = { south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast() }
     lastBounds.current = b
-    loadShelters(b)
+    // Debounce so rapid pan/zoom only fires one fetch when the map settles
+    clearTimeout(boundsTimer.current)
+    boundsTimer.current = setTimeout(() => loadShelters(b), 300)
   }, [loadShelters])
 
   // Which shelters to show in carousel — prefer pre-computed nearest; fall back to on-the-fly sort
@@ -271,9 +283,14 @@ export default function Home() {
   // Active shelter drives the highlighted map pin
   const activeShelter = carouselShelters[activeIndex] ?? null
 
-  // Tapping a map pin opens the shelter page directly
+  // Tapping a map pin or carousel card opens the bottom sheet
   const handleMapPinClick = useCallback((shelter: Shelter) => {
-    router.push(`/shelter/${shelter.id}`)
+    setSelectedShelterId(shelter.id)
+  }, [])
+
+  // Long press on map → navigate to add page with coords pre-filled
+  const handleLongPress = useCallback((lat: number, lng: number) => {
+    router.push(`/add?lat=${lat.toFixed(6)}&lng=${lng.toFixed(6)}`)
   }, [router])
 
   return (
@@ -284,11 +301,12 @@ export default function Home() {
           shelters={shelters}
           userLocation={userLocation}
           flyTarget={flyTarget}
-          highlightedShelterId={activeShelter?.id}
+          highlightedShelterId={selectedShelterId ?? activeShelter?.id}
           sheetFraction={0.22}
           onShelterClick={handleMapPinClick}
           onBoundsChange={handleBoundsChange}
           onRecenter={userLocation ? () => flyTo(userLocation) : undefined}
+          onLongPress={handleLongPress}
         />
       </div>
 
@@ -422,16 +440,25 @@ export default function Home() {
         </div>
       )}
 
-      {/* Card carousel — visible as soon as we have any shelters OR location was denied */}
-      {(carouselShelters.length > 0 || geoState === 'denied') && (
+      {/* Card carousel — hidden when a shelter sheet is open */}
+      {!selectedShelterId && (carouselShelters.length > 0 || geoState === 'denied') && (
         <ShelterCardCarousel
           shelters={carouselShelters}
           activeIndex={activeIndex}
           filter={activeFilters.has('all') ? 'all' : [...activeFilters].join(',')}
           onActiveChange={setActiveIndex}
-          onViewDetail={s => router.push(`/shelter/${s.id}`)}
+          onViewDetail={s => setSelectedShelterId(s.id)}
           geoState={geoState}
           onRequestLocation={requestLocation}
+        />
+      )}
+
+      {/* Bottom sheet — shown when a shelter is selected */}
+      {selectedShelterId && (
+        <ShelterSheet
+          shelterId={selectedShelterId}
+          userLocation={userLocation}
+          onClose={() => setSelectedShelterId(null)}
         />
       )}
     </div>

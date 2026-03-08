@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useRef, useCallback, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { CaretRight, MapPin, CheckCircle, Warning } from '@phosphor-icons/react'
 import type { Shelter } from '@/types'
@@ -70,11 +70,15 @@ function ProgressBar({ step }: { step: Step }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export default function AddShelterPage() {
+function AddShelterPageInner() {
   const router = useRouter()
-  const [step, setStep] = useState<Step>('location')
+  const params = useSearchParams()
+  const presetLat = params.get('lat') ? parseFloat(params.get('lat')!) : null
+  const presetLng = params.get('lng') ? parseFloat(params.get('lng')!) : null
+
+  const [step, setStep] = useState<Step>(presetLat && presetLng ? 'type' : 'location')
   const [form, setForm] = useState<FormData>({
-    lat: null, lng: null, address: '', city: '',
+    lat: presetLat, lng: presetLng, address: '', city: '',
     shelterType: '', name: '', floor: '', capacity: '',
     isAccessible: false, accessibilityNotes: '',
     hours: '', notes: '', photo: null,
@@ -194,6 +198,14 @@ export default function AddShelterPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function AddShelterPage() {
+  return (
+    <Suspense>
+      <AddShelterPageInner />
+    </Suspense>
   )
 }
 
