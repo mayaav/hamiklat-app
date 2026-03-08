@@ -10,7 +10,14 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   title: 'המקלט | מצא מקלט קרוב',
-  description: 'מפת מקלטים קהילתית לישראל — מצא את המקלט הקרוב אליך במהירות',
+  description: 'מפת מקלטים קהילתית לישראל — מצא את המקלט הקרוב אליך במהירות. מקלטים ציבוריים, ממ"דים ומרחבים מוגנים על המפה.',
+  keywords: ['מקלט', 'מקלט ציבורי', 'ממד', 'חדר ביטחון', 'ישראל', 'shelter', 'israel'],
+  openGraph: {
+    title: 'המקלט — מצא מקלט קרוב',
+    description: 'מפת מקלטים קהילתית לישראל. מצא את המקלט הקרוב אליך במהירות.',
+    locale: 'he_IL',
+    type: 'website',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
