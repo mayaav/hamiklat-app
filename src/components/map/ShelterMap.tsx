@@ -73,6 +73,7 @@ interface ShelterMapProps {
   flyTarget?: { coords: [number, number]; seq: number }
   highlightedShelterId?: string
   sheetFraction?: number
+  carouselOffsetPx?: number
   onShelterClick: (shelter: Shelter) => void
   onBoundsChange: (bounds: { getSouth: () => number; getWest: () => number; getNorth: () => number; getEast: () => number }) => void
   onRecenter?: () => void
@@ -110,6 +111,7 @@ function MapInner({
   flyTarget,
   highlightedShelterId,
   sheetFraction = 0,
+  carouselOffsetPx,
   onShelterClick,
   onBoundsChange,
   onRecenter,
@@ -223,7 +225,9 @@ function MapInner({
       <div style={{
         position: 'absolute',
         right: 14,
-        bottom: `calc(${Math.round((sheetFraction) * 100)}% + 16px)`,
+        bottom: carouselOffsetPx != null
+          ? `${carouselOffsetPx + 16}px`
+          : `calc(${Math.round(sheetFraction * 100)}% + 16px)`,
         zIndex: 10,
         display: 'flex',
         flexDirection: 'column',

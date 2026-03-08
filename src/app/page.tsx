@@ -303,6 +303,7 @@ export default function Home() {
           flyTarget={flyTarget}
           highlightedShelterId={selectedShelterId ?? activeShelter?.id}
           sheetFraction={0.22}
+          carouselOffsetPx={200}
           onShelterClick={handleMapPinClick}
           onBoundsChange={handleBoundsChange}
           onRecenter={userLocation ? () => flyTo(userLocation) : undefined}
