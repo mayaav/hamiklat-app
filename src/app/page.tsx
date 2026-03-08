@@ -294,7 +294,7 @@ export default function Home() {
   }, [router])
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden">
+    <div className="relative w-screen overflow-hidden" style={{ height: '100dvh' }}>
       {/* Map fills screen */}
       <div className="absolute inset-0">
         <ShelterMap

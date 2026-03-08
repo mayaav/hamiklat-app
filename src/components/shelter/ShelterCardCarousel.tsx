@@ -146,12 +146,13 @@ export default function ShelterCardCarousel({
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="flex gap-3 overflow-x-auto pb-8 pt-2 px-6"
+          className="flex gap-3 overflow-x-auto pt-2 px-6"
           style={{
             scrollSnapType: 'x mandatory',
             scrollPaddingLeft: 24,
             WebkitOverflowScrolling: 'touch',
             scrollbarWidth: 'none',
+            paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))',
           }}
         >
           {geoState === 'denied' && filtered.length === 0 && (
@@ -193,7 +194,7 @@ function ShelterCard({ shelter, active, onNavigate, onDetails }: {
       className={`shrink-0 bg-white rounded-3xl shadow-lg flex flex-col gap-2.5 p-4 cursor-pointer active:scale-[0.98] transition-all select-none ${
         active ? 'shadow-xl ring-2 ring-amber-200' : 'opacity-90'
       }`}
-      style={{ scrollSnapAlign: 'start', width: 'calc(100vw - 48px)', minWidth: 260, height: 148 }}
+      style={{ scrollSnapAlign: 'start', width: 'calc(100vw - 48px)', minWidth: 260, height: 'min(148px, 28dvh)' }}
       onClick={onDetails}
     >
       {/* Top row: category icon + name + distance chip */}
@@ -238,7 +239,7 @@ function PermissionCard({ onRequestLocation }: { onRequestLocation: () => void }
   return (
     <div
       className="shrink-0 bg-white rounded-3xl shadow-lg flex flex-col items-center justify-center gap-3 p-5 text-center"
-      style={{ scrollSnapAlign: 'start', width: 'calc(100vw - 48px)', minWidth: 260, height: 148 }}
+      style={{ scrollSnapAlign: 'start', width: 'calc(100vw - 48px)', minWidth: 260, height: 'min(148px, 28dvh)' }}
     >
       <p className="text-sm font-semibold text-gray-800">מצא מקום מוגן קרוב</p>
       <p className="text-xs text-gray-500">כדי לראות מקלטים בסביבתך, נדרשת גישה למיקום</p>
@@ -253,7 +254,7 @@ function EmptyFilterCard() {
   return (
     <div
       className="shrink-0 bg-white rounded-3xl shadow-lg flex flex-col items-center justify-center gap-2 p-5 text-center"
-      style={{ scrollSnapAlign: 'start', width: 'calc(100vw - 48px)', minWidth: 260, height: 148 }}
+      style={{ scrollSnapAlign: 'start', width: 'calc(100vw - 48px)', minWidth: 260, height: 'min(148px, 28dvh)' }}
     >
       <p className="text-sm text-gray-500">אין מקלטים התואמים לסינון זה</p>
       <p className="text-xs text-gray-400">נסה לשנות את הסינון למעלה</p>
