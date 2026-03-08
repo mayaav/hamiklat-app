@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import type { Shelter } from '@/types'
 import ShelterCardCarousel from '@/components/shelter/ShelterCardCarousel'
 import { Input } from '@/components/ui/input'
+import { inferCategory } from '@/lib/shelterCategory'
 
 const ShelterMap = dynamic(() => import('@/components/map/ShelterMap'), {
   ssr: false,
@@ -14,22 +15,34 @@ const ShelterMap = dynamic(() => import('@/components/map/ShelterMap'), {
 
 const FILTER_TAGS = [
   { id: 'all',        label: 'הכל' },
-  { id: 'official',   label: '★ רשמי' },
-  { id: 'verified',   label: '✓ מאומת' },
+  { id: 'open',       label: '✓ פתוח' },
+  { id: 'public',     label: '🏛 ציבורי' },
   { id: 'accessible', label: '♿ נגיש' },
-  { id: 'mamad',      label: 'ממ"ד' },
-  { id: 'public',     label: 'ציבורי' },
+  { id: 'official',   label: '★ רשמי' },
+  { id: 'schools',    label: '🏫 בתי ספר' },
+  { id: 'malls',      label: '🛍 קניונים' },
+  { id: 'mamad',      label: '🏠 ממ"ד' },
 ]
 
-function applyFilter(shelters: Shelter[], filter: string): Shelter[] {
-  switch (filter) {
-    case 'official':   return shelters.filter(s => s.source === 'official')
-    case 'verified':   return shelters.filter(s => s.status === 'verified' || s.source === 'official')
-    case 'accessible': return shelters.filter(s => s.is_accessible)
-    case 'mamad':      return shelters.filter(s => s.shelter_type === 'mamad')
-    case 'public':     return shelters.filter(s => s.shelter_type === 'public_shelter')
-    default:           return shelters
-  }
+function applyFilters(shelters: Shelter[], activeFilters: Set<string>): Shelter[] {
+  if (activeFilters.has('all') || activeFilters.size === 0) return shelters
+  return shelters.filter(s => {
+    if (activeFilters.has('open') && s.status === 'unverified' && s.verification_count === 0) return false
+    if (activeFilters.has('public')) {
+      const cat = inferCategory(s)
+      const publicCats = ['public_shelter', 'school', 'high_school', 'shopping_mall', 'public_building', 'community_center', 'transport_station', 'hospital']
+      if (!publicCats.includes(cat)) return false
+    }
+    if (activeFilters.has('accessible') && !s.is_accessible) return false
+    if (activeFilters.has('official') && s.source !== 'official') return false
+    if (activeFilters.has('schools')) {
+      const cat = inferCategory(s)
+      if (cat !== 'school' && cat !== 'high_school') return false
+    }
+    if (activeFilters.has('malls') && inferCategory(s) !== 'shopping_mall') return false
+    if (activeFilters.has('mamad') && s.shelter_type !== 'mamad') return false
+    return true
+  })
 }
 
 function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -55,7 +68,7 @@ export default function Home() {
   const [activeIndex, setActiveIndex] = useState(0)
   const [flyTarget, setFlyTarget] = useState<{ coords: [number, number]; seq: number } | undefined>()
   const flySeq = useRef(0)
-  const [filter, setFilter] = useState('all')
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set(['all']))
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<{ place_name: string; center: [number, number] }[]>([])
   const [showSearch, setShowSearch] = useState(false)
@@ -206,7 +219,7 @@ export default function Home() {
     }
     return shelters.slice(0, 20)
   }, [nearestShelters, shelters, userLocation])
-  const carouselShelters = applyFilter(baseShelters, filter)
+  const carouselShelters = applyFilters(baseShelters, activeFilters)
 
   // Active shelter drives the highlighted map pin
   const activeShelter = carouselShelters[activeIndex] ?? null
@@ -308,19 +321,36 @@ export default function Home() {
             className="flex gap-2 overflow-x-auto"
             style={{ scrollbarWidth: 'none' }}
           >
-            {FILTER_TAGS.map(tag => (
-              <button
-                key={tag.id}
-                onClick={() => { setFilter(tag.id); setActiveIndex(0) }}
-                className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
-                  filter === tag.id
-                    ? 'bg-gray-900 text-white shadow-sm'
-                    : 'bg-white/90 backdrop-blur text-gray-600 shadow-sm border border-gray-100'
-                }`}
-              >
-                {tag.label}
-              </button>
-            ))}
+            {FILTER_TAGS.map(tag => {
+              const isActive = activeFilters.has(tag.id)
+              return (
+                <button
+                  key={tag.id}
+                  onClick={() => {
+                    setActiveFilters(prev => {
+                      const next = new Set(prev)
+                      if (tag.id === 'all') return new Set(['all'])
+                      if (isActive) {
+                        next.delete(tag.id)
+                        return next.size === 0 ? new Set(['all']) : next
+                      } else {
+                        next.delete('all')
+                        next.add(tag.id)
+                        return next
+                      }
+                    })
+                    setActiveIndex(0)
+                  }}
+                  className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
+                    isActive
+                      ? 'bg-gray-900 text-white shadow-sm'
+                      : 'bg-white/90 backdrop-blur text-gray-600 shadow-sm border border-gray-100'
+                  }`}
+                >
+                  {tag.label}
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
@@ -340,7 +370,7 @@ export default function Home() {
         <ShelterCardCarousel
           shelters={carouselShelters}
           activeIndex={activeIndex}
-          filter={filter}
+          filter={activeFilters.has('all') ? 'all' : [...activeFilters].join(',')}
           onActiveChange={setActiveIndex}
           onViewDetail={s => router.push(`/shelter/${s.id}`)}
           geoState={geoState}
