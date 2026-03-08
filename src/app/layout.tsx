@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { DM_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import './globals.css'
 
 const dmSans = DM_Sans({
@@ -10,6 +11,10 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
+  icons: {
+    icon: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
   title: 'המקלט | מצא מקלט קרוב',
   description: 'מפת מקלטים קהילתית לישראל — מצא את המקלט הקרוב אליך במהירות. מקלטים ציבוריים, ממ"דים ומרחבים מוגנים על המפה.',
   keywords: ['מקלט', 'מקלט ציבורי', 'ממד', 'חדר ביטחון', 'ישראל', 'shelter', 'israel'],
@@ -37,7 +42,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="he" dir="rtl" className={dmSans.variable}>
-      <body className="antialiased font-sans">{children}<Analytics /></body>
+      <body className="antialiased font-sans">{children}<Analytics /><SpeedInsights /></body>
     </html>
   )
 }
