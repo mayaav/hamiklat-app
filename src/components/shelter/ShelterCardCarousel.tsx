@@ -197,7 +197,7 @@ function ShelterCard({ shelter, active, onNavigate, onDetails }: {
   return (
     <div
       className={`shrink-0 bg-white rounded-3xl shadow-lg flex flex-col gap-2.5 p-4 cursor-pointer active:scale-[0.98] transition-all select-none ${
-        active ? 'shadow-xl ring-2 ring-amber-200' : 'opacity-90'
+        active ? 'shadow-xl' : 'opacity-80'
       }`}
       style={{ scrollSnapAlign: 'start', width: 'calc(100vw - 48px)', minWidth: 260, height: 148 }}
       onClick={onDetails}
