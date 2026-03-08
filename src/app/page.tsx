@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Shelter } from '@/types'
 import ShelterCardCarousel from '@/components/shelter/ShelterCardCarousel'
@@ -195,8 +195,17 @@ export default function Home() {
     loadShelters(b)
   }, [loadShelters])
 
-  // Which shelters to show in carousel — if we have distance data, use sorted list; else show all
-  const baseShelters = nearestShelters.length > 0 ? nearestShelters : shelters.slice(0, 20)
+  // Which shelters to show in carousel — prefer pre-computed nearest; fall back to on-the-fly sort
+  const baseShelters = useMemo(() => {
+    if (nearestShelters.length > 0) return nearestShelters
+    if (userLocation && shelters.length > 0) {
+      return [...shelters]
+        .map(s => ({ ...s, distance: haversine(userLocation[0], userLocation[1], s.lat, s.lng) }))
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, 20)
+    }
+    return shelters.slice(0, 20)
+  }, [nearestShelters, shelters, userLocation])
   const carouselShelters = applyFilter(baseShelters, filter)
 
   // Active shelter drives the highlighted map pin
