@@ -78,10 +78,21 @@ interface ShelterMapProps {
   onRecenter?: () => void
 }
 
+const MAP_POS_KEY = 'mapLastPos'
+
+function getSavedView() {
+  try {
+    const raw = sessionStorage.getItem(MAP_POS_KEY)
+    if (raw) return JSON.parse(raw) as { longitude: number; latitude: number; zoom: number }
+  } catch { /* ignore */ }
+  return null
+}
+
 export default function ShelterMap(props: ShelterMapProps) {
+  const saved = getSavedView()
   return (
     <Map
-      initialViewState={{ longitude: 35.2137, latitude: 31.7683, zoom: 8 }}
+      initialViewState={saved ?? { longitude: 35.2137, latitude: 31.7683, zoom: 8 }}
       style={{ width: '100%', height: '100%' }}
       mapStyle={MAPBOX_STYLE}
       mapboxAccessToken={MAPBOX_TOKEN}
@@ -113,9 +124,14 @@ function MapInner({
     map.flyTo({ center: [flyTarget.coords[1], flyTarget.coords[0]], zoom: 16, duration: 1200 })
   }, [flyTarget, map])
 
-  // Bounds change
+  // Bounds change + save position for back-navigation restore
   const handleMoveEnd = useCallback(() => {
     if (!map) return
+    const c = map.getCenter()
+    const z = map.getZoom()
+    try {
+      sessionStorage.setItem(MAP_POS_KEY, JSON.stringify({ longitude: c.lng, latitude: c.lat, zoom: z }))
+    } catch { /* ignore */ }
     const b = map.getBounds()
     onBoundsChange({
       getSouth: () => b.getSouth(),

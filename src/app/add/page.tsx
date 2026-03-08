@@ -206,7 +206,7 @@ function LocationStep({ form, update, onNext }: {
 }) {
   const [addrQuery, setAddrQuery] = useState(form.address || '')
   const [results, setResults] = useState<{ display_name: string; lat: string; lon: string; address?: Record<string, string> }[]>([])
-  const timer = useRef<ReturnType<typeof setTimeout>>()
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const search = (q: string) => {
     setAddrQuery(q)

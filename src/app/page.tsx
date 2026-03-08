@@ -57,7 +57,7 @@ export default function Home() {
   const flySeq = useRef(0)
   const [filter, setFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<{ display_name: string; lat: string; lon: string }[]>([])
+  const [searchResults, setSearchResults] = useState<{ place_name: string; center: [number, number] }[]>([])
   const [showSearch, setShowSearch] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -119,7 +119,11 @@ export default function Home() {
       const coords: [number, number] = [lat, lng]
       setUserLocation(coords)
       setGeoState('ready')
-      flyTo(coords)
+      // Only fly if the map has no saved position (first visit, not returning from shelter page)
+      const hasSavedPos = !!sessionStorage.getItem('mapLastPos')
+      if (!hasSavedPos) {
+        flyTo(coords)
+      }
       // Load shelters within ~5km of user so we get local results, not Israel-wide
       const delta = 0.05 // ~5km
       const data = await loadShelters({ south: lat - delta, west: lng - delta, north: lat + delta, east: lng + delta })
@@ -175,11 +179,12 @@ export default function Home() {
     if (q.length < 2) { setSearchResults([]); return }
     searchTimer.current = setTimeout(async () => {
       try {
+        const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=il&limit=5`,
-          { headers: { 'Accept-Language': 'he' } }
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?country=il&language=he&limit=5&access_token=${token}`
         )
-        setSearchResults(await res.json())
+        const data = await res.json()
+        setSearchResults(data.features ?? [])
       } catch { /* silent */ }
     }, 400)
   }, [])
@@ -236,17 +241,17 @@ export default function Home() {
                   <div className="absolute top-full mt-1 w-full bg-white rounded-2xl shadow-xl overflow-hidden z-10">
                     {searchResults.map(r => (
                       <button
-                        key={r.lat + r.lon}
+                        key={r.center[0] + ',' + r.center[1]}
                         className="w-full text-right px-4 py-3 text-sm hover:bg-gray-50 border-b border-gray-50 last:border-0"
                         onClick={async () => {
                           setSearchResults([])
                           setShowSearch(false)
                           setSearchQuery('')
-                          const coords: [number, number] = [parseFloat(r.lat), parseFloat(r.lon)]
+                          // Mapbox center is [lng, lat]
+                          const coords: [number, number] = [r.center[1], r.center[0]]
                           userPickedLocation.current = true
                           setUserLocation(coords)
                           setGeoState('ready')
-                          localStorage.setItem('lastLocation', JSON.stringify({ lat: coords[0], lng: coords[1] }))
                           flyTo(coords)
                           const [lat, lng] = coords
                           const delta = 0.05
@@ -254,7 +259,7 @@ export default function Home() {
                           computeNearest(coords, data)
                         }}
                       >
-                        {r.display_name}
+                        {r.place_name}
                       </button>
                     ))}
                   </div>

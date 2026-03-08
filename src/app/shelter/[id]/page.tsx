@@ -25,12 +25,14 @@ const REPORT_TYPES = [
   { value: 'other', label: 'אחר' },
 ]
 
-function navigateTo(shelter: Shelter) {
-  const coords = `${shelter.lat},${shelter.lng}`
-  if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-    window.open(`maps://maps.apple.com/?daddr=${coords}&dirflg=w`)
+function navigateTo(shelter: Shelter, app: 'waze' | 'google' | 'apple') {
+  const { lat, lng } = shelter
+  if (app === 'waze') {
+    window.open(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`)
+  } else if (app === 'apple') {
+    window.open(`maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=w`)
   } else {
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${coords}&travelmode=walking`)
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`)
   }
 }
 
@@ -159,6 +161,8 @@ export default function ShelterDetailPage() {
   const [loading, setLoading] = useState(true)
   const [nearby, setNearby] = useState<POI[]>([])
   const [photoIndex, setPhotoIndex] = useState(0)
+  const [showNavPicker, setShowNavPicker] = useState(false)
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent)
 
   // comment form
   const [commentText, setCommentText] = useState('')
@@ -695,13 +699,42 @@ export default function ShelterDetailPage() {
           </button>
 
           {/* Primary: navigate */}
-          <Button
-            className="flex-1 h-12 rounded-2xl text-base font-semibold gap-2"
-            onClick={() => navigateTo(shelter)}
-          >
-            <NavigationArrow size={18} weight="fill" />
-            נווט למקלט
-          </Button>
+          <div className="flex-1 relative">
+            <Button
+              className="w-full h-12 rounded-2xl text-base font-semibold gap-2"
+              onClick={() => setShowNavPicker(p => !p)}
+            >
+              <NavigationArrow size={18} weight="fill" />
+              נווט למקלט
+            </Button>
+            {showNavPicker && (
+              <div className="absolute bottom-14 left-0 right-0 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-10">
+                <button
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-right hover:bg-gray-50 border-b border-gray-50"
+                  onClick={() => { navigateTo(shelter, 'waze'); setShowNavPicker(false) }}
+                >
+                  <span className="text-xl">🗺</span>
+                  <span className="font-medium">Waze</span>
+                </button>
+                <button
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-right hover:bg-gray-50 border-b border-gray-50"
+                  onClick={() => { navigateTo(shelter, 'google'); setShowNavPicker(false) }}
+                >
+                  <span className="text-xl">📍</span>
+                  <span className="font-medium">Google Maps</span>
+                </button>
+                {isIOS && (
+                  <button
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-right hover:bg-gray-50"
+                    onClick={() => { navigateTo(shelter, 'apple'); setShowNavPicker(false) }}
+                  >
+                    <span className="text-xl">🍎</span>
+                    <span className="font-medium">Apple Maps</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {photoFile && (
