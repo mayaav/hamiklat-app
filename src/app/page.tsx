@@ -230,7 +230,8 @@ export default function Home() {
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        if (userPickedLocation.current) return
+        // Always honour recenter — reset the "user picked a search result" flag
+        userPickedLocation.current = false
         const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude]
         setUserLocation(coords)
         setGeoState('ready')
@@ -241,7 +242,7 @@ export default function Home() {
         computeNearest(coords, data)
       },
       () => setGeoState('denied'),
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
     )
   }, [loadShelters, computeNearest, flyTo])
 
@@ -252,18 +253,26 @@ export default function Home() {
     searchTimer.current = setTimeout(async () => {
       try {
         const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
-        const res = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?country=il&language=he&limit=5&access_token=${token}`
-        )
+        // Build URL manually — URLSearchParams encodes commas which Mapbox rejects
+        let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`
+        url += `?country=il&language=he,en&types=address,place,neighborhood,locality,poi,region&limit=6`
+        url += `&access_token=${token}`
+        // Bias results toward the user's current location when available
+        if (userLocation) {
+          url += `&proximity=${userLocation[1]},${userLocation[0]}`
+        }
+        const res = await fetch(url)
         const data = await res.json()
         setSearchResults(data.features ?? [])
       } catch { /* silent */ }
-    }, 400)
-  }, [])
+    }, 350)
+  }, [userLocation])
 
-  const handleBoundsChange = useCallback((bounds: { getSouth: () => number; getWest: () => number; getNorth: () => number; getEast: () => number }) => {
+  const handleBoundsChange = useCallback((bounds: { getSouth: () => number; getWest: () => number; getNorth: () => number; getEast: () => number; zoom?: number }) => {
     const b = { south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast() }
     lastBounds.current = b
+    // Don't fetch at country-level zoom — pins would all disappear while a huge bbox returns sparse results
+    if ((bounds.zoom ?? 99) < 10) return
     // Debounce so rapid pan/zoom only fires one fetch when the map settles
     clearTimeout(boundsTimer.current)
     boundsTimer.current = setTimeout(() => loadShelters(b), 300)
@@ -344,29 +353,35 @@ export default function Home() {
                 />
                 {searchResults.length > 0 && (
                   <div className="absolute top-full mt-1 w-full bg-white rounded-2xl shadow-xl overflow-hidden z-10">
-                    {searchResults.map(r => (
-                      <button
-                        key={r.center[0] + ',' + r.center[1]}
-                        className="w-full text-right px-4 py-3 text-sm hover:bg-gray-50 border-b border-gray-50 last:border-0"
-                        onClick={async () => {
-                          setSearchResults([])
-                          setShowSearch(false)
-                          setSearchQuery('')
-                          // Mapbox center is [lng, lat]
-                          const coords: [number, number] = [r.center[1], r.center[0]]
-                          userPickedLocation.current = true
-                          setUserLocation(coords)
-                          setGeoState('ready')
-                          flyTo(coords)
-                          const [lat, lng] = coords
-                          const delta = 0.05
-                          const data = await loadShelters({ south: lat - delta, west: lng - delta, north: lat + delta, east: lng + delta })
-                          computeNearest(coords, data)
-                        }}
-                      >
-                        {r.place_name}
-                      </button>
-                    ))}
+                    {searchResults.map(r => {
+                      // Split "Main Name, Context" for cleaner display
+                      const [mainName, ...rest] = r.place_name.split(',')
+                      const context = rest.join(',').trim()
+                      return (
+                        <button
+                          key={r.center[0] + ',' + r.center[1]}
+                          className="w-full text-right px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                          onClick={async () => {
+                            setSearchResults([])
+                            setShowSearch(false)
+                            setSearchQuery('')
+                            // Mapbox center is [lng, lat]
+                            const coords: [number, number] = [r.center[1], r.center[0]]
+                            userPickedLocation.current = true
+                            setUserLocation(coords)
+                            setGeoState('ready')
+                            flyTo(coords)
+                            const [lat, lng] = coords
+                            const delta = 0.05
+                            const data = await loadShelters({ south: lat - delta, west: lng - delta, north: lat + delta, east: lng + delta })
+                            computeNearest(coords, data)
+                          }}
+                        >
+                          <div className="text-sm font-medium text-gray-900">{mainName}</div>
+                          {context && <div className="text-xs text-gray-400 mt-0.5 truncate">{context}</div>}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
               </>

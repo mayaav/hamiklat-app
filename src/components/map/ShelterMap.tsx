@@ -75,7 +75,7 @@ interface ShelterMapProps {
   sheetFraction?: number
   carouselOffsetPx?: number
   onShelterClick: (shelter: Shelter) => void
-  onBoundsChange: (bounds: { getSouth: () => number; getWest: () => number; getNorth: () => number; getEast: () => number }) => void
+  onBoundsChange: (bounds: { getSouth: () => number; getWest: () => number; getNorth: () => number; getEast: () => number; zoom?: number }) => void
   onRecenter?: () => void
   onLongPress?: (lat: number, lng: number) => void
 }
@@ -144,6 +144,7 @@ function MapInner({
       getWest: () => b.getWest(),
       getNorth: () => b.getNorth(),
       getEast: () => b.getEast(),
+      zoom: z,
     })
   }, [map, onBoundsChange])
 
@@ -159,11 +160,26 @@ function MapInner({
   useEffect(() => {
     if (!map || !onLongPress) return
     let timer: ReturnType<typeof setTimeout>
+    let startX = 0
+    let startY = 0
 
-    const onTouchStart = (e: { lngLat: { lat: number; lng: number } }) => {
+    const onTouchStart = (e: { lngLat: { lat: number; lng: number }; originalEvent: TouchEvent }) => {
+      const touch = e.originalEvent.touches[0]
+      startX = touch.clientX
+      startY = touch.clientY
       const { lat, lng } = e.lngLat
-      timer = setTimeout(() => setDropPin({ lat, lng }), 550)
+      // 700ms threshold — long enough to not trigger on normal taps or scrolls
+      timer = setTimeout(() => setDropPin({ lat, lng }), 700)
     }
+
+    const onTouchMove = (e: { originalEvent: TouchEvent }) => {
+      const touch = e.originalEvent.touches[0]
+      const dx = touch.clientX - startX
+      const dy = touch.clientY - startY
+      // Cancel if finger moved more than 10px — user is panning, not long-pressing
+      if (Math.sqrt(dx * dx + dy * dy) > 10) clearTimeout(timer)
+    }
+
     const cancel = () => clearTimeout(timer)
 
     // Desktop: right-click
@@ -172,16 +188,16 @@ function MapInner({
       setDropPin({ lat: e.lngLat.lat, lng: e.lngLat.lng })
     }
 
-    map.on('touchstart', onTouchStart)
-    map.on('touchend',   cancel)
-    map.on('touchmove',  cancel)
+    map.on('touchstart',  onTouchStart)
+    map.on('touchend',    cancel)
+    map.on('touchmove',   onTouchMove)
     map.on('contextmenu', onContext)
 
     return () => {
       clearTimeout(timer)
       map.off('touchstart',   onTouchStart)
       map.off('touchend',     cancel)
-      map.off('touchmove',    cancel)
+      map.off('touchmove',    onTouchMove)
       map.off('contextmenu',  onContext)
     }
   }, [map, onLongPress])
