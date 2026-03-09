@@ -92,8 +92,7 @@ export default function Home() {
   const [proximityPOIs, setProximityPOIs] = useState<{ coffee: [number, number][]; pharmacy: [number, number][] }>({ coffee: [], pharmacy: [] })
   const poiFetchedFor = useRef<{ coffee: string; pharmacy: string }>({ coffee: '', pharmacy: '' })
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<{ place_name: string; center: [number, number]; mapbox_id?: string }[]>([])
-  const searchSessionToken = useRef(crypto.randomUUID())
+  const [searchResults, setSearchResults] = useState<{ place_name: string; center: [number, number] }[]>([])
   const [showSearch, setShowSearch] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -253,23 +252,30 @@ export default function Home() {
     if (q.length < 2) { setSearchResults([]); return }
     searchTimer.current = setTimeout(async () => {
       try {
-        const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
-        // Mapbox Search Box API v1 — better Hebrew autocomplete than geocoding v5
-        let url = `https://api.mapbox.com/search/searchbox/v1/suggest?q=${encodeURIComponent(q)}`
-        url += `&country=il&language=he,en&limit=6`
-        url += `&session_token=${searchSessionToken.current}`
-        url += `&access_token=${token}`
+        // Nominatim (OpenStreetMap) — better Hebrew abbreviation support than Mapbox
+        const params = new URLSearchParams({
+          q: q,
+          format: 'jsonv2',
+          countrycodes: 'il',
+          limit: '6',
+          'accept-language': 'he',
+          addressdetails: '1',
+        })
         if (userLocation) {
-          url += `&proximity=${userLocation[1]},${userLocation[0]}`
+          // Bias toward user location with a viewbox (~10km radius)
+          const [lat, lng] = userLocation
+          const d = 0.1
+          params.set('viewbox', `${lng - d},${lat + d},${lng + d},${lat - d}`)
+          params.set('bounded', '0')
         }
-        const res = await fetch(url)
-        const data = await res.json()
-        // Search Box returns suggestions — retrieve coords for each
-        const suggestions = (data.suggestions ?? []) as { name: string; place_formatted?: string; mapbox_id: string }[]
-        setSearchResults(suggestions.map(s => ({
-          place_name: [s.name, s.place_formatted].filter(Boolean).join(', '),
-          center: [0, 0] as [number, number], // filled on click via retrieve
-          mapbox_id: s.mapbox_id,
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?${params}`,
+          { headers: { 'User-Agent': 'hamiklat-app/1.0 (shelter finder)' } }
+        )
+        const data = await res.json() as { display_name: string; lat: string; lon: string }[]
+        setSearchResults(data.map(r => ({
+          place_name: r.display_name,
+          center: [parseFloat(r.lon), parseFloat(r.lat)] as [number, number],
         })))
       } catch { /* silent */ }
     }, 350)
@@ -366,26 +372,14 @@ export default function Home() {
                       const context = rest.join(',').trim()
                       return (
                         <button
-                          key={r.mapbox_id ?? r.center[0] + ',' + r.center[1]}
+                          key={r.center[0] + ',' + r.center[1]}
                           className="w-full text-right px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0"
                           onClick={async () => {
                             setSearchResults([])
                             setShowSearch(false)
                             setSearchQuery('')
-                            let coords: [number, number]
-                            if (r.mapbox_id) {
-                              // Search Box API: retrieve full feature to get coordinates
-                              const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
-                              const rv = await fetch(
-                                `https://api.mapbox.com/search/searchbox/v1/retrieve/${r.mapbox_id}?session_token=${searchSessionToken.current}&access_token=${token}`
-                              )
-                              const rd = await rv.json()
-                              const [lng, lat] = rd.features?.[0]?.geometry?.coordinates ?? [0, 0]
-                              coords = [lat, lng]
-                            } else {
-                              // Fallback: geocoding v5 result
-                              coords = [r.center[1], r.center[0]]
-                            }
+                            // Nominatim returns center as [lng, lat]
+                            const coords: [number, number] = [r.center[1], r.center[0]]
                             userPickedLocation.current = true
                             setUserLocation(coords)
                             setGeoState('ready')
