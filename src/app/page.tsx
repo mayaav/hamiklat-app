@@ -366,7 +366,7 @@ export default function Home() {
                       const context = rest.join(',').trim()
                       return (
                         <button
-                          key={r.center[0] + ',' + r.center[1]}
+                          key={r.mapbox_id ?? r.center[0] + ',' + r.center[1]}
                           className="w-full text-right px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0"
                           onClick={async () => {
                             setSearchResults([])
