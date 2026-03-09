@@ -1,13 +1,17 @@
 'use client'
 
-import { useEffect, useRef, useCallback, useState } from 'react'
-import Map, { Marker, useMap } from 'react-map-gl/mapbox'
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
+import Map, { Marker, Source, Layer, useMap } from 'react-map-gl/mapbox'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import type { Shelter } from '@/types'
 import { inferCategory, CATEGORY_CONFIG } from '@/lib/shelterCategory'
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
 const MAPBOX_STYLE = 'mapbox://styles/mayaav/cmmi105xi002501qw7k6qc267'
+
+// Zoom thresholds
+const ZOOM_DOTS    = 14  // below this: GeoJSON dots + clusters
+const ZOOM_CLUSTER = 12  // below this: cluster dots together
 
 // ─── Marker HTML factories ────────────────────────────────────────────────────
 
@@ -51,7 +55,6 @@ function shelterMarkerHtml(shelter: Shelter, highlighted = false): string {
     ? 'font-family:system-ui,sans-serif;font-weight:900;font-size:13px;'
     : 'font-size:15px;'
   const border = `1.5px solid ${cfg.color}99`
-  const badge = ''
   return `<div style="
     position:relative;
     width:${size}px;height:${size}px;
@@ -62,7 +65,7 @@ function shelterMarkerHtml(shelter: Shelter, highlighted = false): string {
     display:flex;align-items:center;justify-content:center;
     ${symbolStyle}
     cursor:pointer;line-height:1;
-  "><span style="pointer-events:none">${cfg.mapSymbol}</span>${badge}</div>`
+  "><span style="pointer-events:none">${cfg.mapSymbol}</span></div>`
 }
 
 // ─── Main component ────────────────────────────────────────────────────────────
@@ -121,11 +124,13 @@ function MapInner({
   const prevSeq = useRef(-1)
   const [dropPin, setDropPin] = useState<{ lat: number; lng: number } | null>(null)
   const [mapReady, setMapReady] = useState(false)
+  const [zoom, setZoom] = useState<number>(() => getSavedView()?.zoom ?? 8)
 
+  // Map ready
   useEffect(() => {
     if (!map) return
-    if (map.isStyleLoaded()) { setMapReady(true); return }
-    const onLoad = () => setMapReady(true)
+    if (map.isStyleLoaded()) { setMapReady(true); setZoom(map.getZoom()); return }
+    const onLoad = () => { setMapReady(true); setZoom(map.getZoom()) }
     map.once('load', onLoad)
     return () => { map.off('load', onLoad) }
   }, [map])
@@ -138,11 +143,12 @@ function MapInner({
     map.flyTo({ center: [flyTarget.coords[1], flyTarget.coords[0]], zoom: 16, duration: 1200 })
   }, [flyTarget, map])
 
-  // Bounds change + save position for back-navigation restore
+  // Bounds change + save position + track zoom
   const handleMoveEnd = useCallback(() => {
     if (!map) return
     const c = map.getCenter()
     const z = map.getZoom()
+    setZoom(z)
     try {
       sessionStorage.setItem(MAP_POS_KEY, JSON.stringify({ longitude: c.lng, latitude: c.lat, zoom: z }))
     } catch { /* ignore */ }
@@ -160,10 +166,54 @@ function MapInner({
   useEffect(() => {
     if (!map) return
     map.on('moveend', handleMoveEnd)
-    return () => {
-      map.off('moveend', handleMoveEnd)
-    }
+    return () => { map.off('moveend', handleMoveEnd) }
   }, [map, handleMoveEnd])
+
+  // Click handlers for GeoJSON dot/cluster layers
+  useEffect(() => {
+    if (!map || !mapReady) return
+
+    const onDotClick = (e: { point: [number, number] | { x: number; y: number } }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const features = map.queryRenderedFeatures(e.point as any, { layers: ['shelter-dots'] })
+      if (!features.length) return
+      const id = features[0].properties?.id
+      const shelter = shelters.find(s => s.id === id)
+      if (shelter) onShelterClick(shelter)
+    }
+
+    const onClusterClick = (e: { point: [number, number] | { x: number; y: number } }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const features = map.queryRenderedFeatures(e.point as any, { layers: ['shelter-clusters'] })
+      if (!features.length) return
+      const clusterId = features[0].properties?.cluster_id
+      const source = map.getSource('shelters-source') as { getClusterExpansionZoom: (id: number, cb: (err: unknown, z: number) => void) => void }
+      source.getClusterExpansionZoom(clusterId, (err, z) => {
+        if (err) return
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const coords = (features[0].geometry as any).coordinates as [number, number]
+        map.flyTo({ center: coords, zoom: z })
+      })
+    }
+
+    const setCursor = (v: string) => () => { map.getCanvas().style.cursor = v }
+
+    map.on('click', 'shelter-dots',     onDotClick)
+    map.on('click', 'shelter-clusters', onClusterClick)
+    map.on('mouseenter', 'shelter-dots',     setCursor('pointer'))
+    map.on('mouseleave', 'shelter-dots',     setCursor(''))
+    map.on('mouseenter', 'shelter-clusters', setCursor('pointer'))
+    map.on('mouseleave', 'shelter-clusters', setCursor(''))
+
+    return () => {
+      map.off('click', 'shelter-dots',     onDotClick)
+      map.off('click', 'shelter-clusters', onClusterClick)
+      map.off('mouseenter', 'shelter-dots',     setCursor('pointer'))
+      map.off('mouseleave', 'shelter-dots',     setCursor(''))
+      map.off('mouseenter', 'shelter-clusters', setCursor('pointer'))
+      map.off('mouseleave', 'shelter-clusters', setCursor(''))
+    }
+  }, [map, mapReady, shelters, onShelterClick])
 
   // Long press → drop pin
   useEffect(() => {
@@ -173,7 +223,6 @@ function MapInner({
     let startY = 0
 
     const onTouchStart = (e: { lngLat: { lat: number; lng: number }; originalEvent: TouchEvent }) => {
-      // Ignore multi-touch (pinch to zoom) — only single finger qualifies
       if (e.originalEvent.touches.length > 1) return
       const touch = e.originalEvent.touches[0]
       startX = touch.clientX
@@ -187,13 +236,11 @@ function MapInner({
       const touch = e.originalEvent.touches[0]
       const dx = touch.clientX - startX
       const dy = touch.clientY - startY
-      // 20px threshold — enough to absorb finger tremor but still cancel real panning
       if (Math.sqrt(dx * dx + dy * dy) > 20) clearTimeout(timer)
     }
 
     const cancel = () => clearTimeout(timer)
 
-    // Desktop: right-click
     const onContext = (e: { lngLat: { lat: number; lng: number }; preventDefault: () => void }) => {
       e.preventDefault()
       setDropPin({ lat: e.lngLat.lat, lng: e.lngLat.lng })
@@ -202,7 +249,7 @@ function MapInner({
     map.on('touchstart',  onTouchStart)
     map.on('touchend',    cancel)
     map.on('touchmove',   onTouchMove)
-    map.on('movestart',   cancel)   // map started panning/zooming — cancel immediately
+    map.on('movestart',   cancel)
     map.on('contextmenu', onContext)
 
     return () => {
@@ -215,25 +262,80 @@ function MapInner({
     }
   }, [map, onLongPress])
 
+  // GeoJSON data for source (used at zoom < ZOOM_DOTS)
+  const geojsonData = useMemo(() => ({
+    type: 'FeatureCollection' as const,
+    features: shelters.map(s => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [s.lng, s.lat] as [number, number] },
+      properties: { id: s.id },
+    })),
+  }), [shelters])
+
+  // At zoom >= ZOOM_DOTS show full Markers; always show highlighted shelter as Marker
+  const showFullMarkers = zoom >= ZOOM_DOTS
+  const markersToRender = showFullMarkers
+    ? shelters
+    : shelters.filter(s => s.id === highlightedShelterId)
+
   if (!mapReady) return null
 
   return (
     <>
-      {/* User location dot */}
-      {userLocation && (
-        <Marker longitude={userLocation[1]} latitude={userLocation[0]} anchor="center">
-          <div style={{
-            width: 16, height: 16,
-            background: '#4285f4',
-            border: '2.5px solid white',
-            borderRadius: '50%',
-            boxShadow: '0 0 0 5px rgba(66,133,244,0.2)',
-          }} />
-        </Marker>
-      )}
+      {/* ── GeoJSON source: dots + clusters (hidden at zoom >= ZOOM_DOTS via layer maxzoom) ── */}
+      <Source
+        id="shelters-source"
+        type="geojson"
+        data={geojsonData}
+        cluster={true}
+        clusterMaxZoom={ZOOM_CLUSTER}
+        clusterRadius={40}
+      >
+        {/* Cluster circles */}
+        <Layer
+          id="shelter-clusters"
+          type="circle"
+          maxzoom={ZOOM_DOTS}
+          filter={['has', 'point_count']}
+          paint={{
+            'circle-color': '#eab308',
+            'circle-radius': ['step', ['get', 'point_count'], 14, 10, 18, 50, 22] as unknown as number,
+            'circle-opacity': 0.88,
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#fff',
+          }}
+        />
+        {/* Cluster count labels */}
+        <Layer
+          id="shelter-cluster-count"
+          type="symbol"
+          maxzoom={ZOOM_DOTS}
+          filter={['has', 'point_count']}
+          layout={{
+            'text-field': '{point_count_abbreviated}',
+            'text-size': 12,
+            'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+          }}
+          paint={{ 'text-color': '#111' }}
+        />
+        {/* Individual dots (unclustered) */}
+        <Layer
+          id="shelter-dots"
+          type="circle"
+          maxzoom={ZOOM_DOTS}
+          filter={['!', ['has', 'point_count']]}
+          paint={{
+            'circle-color': '#eab308',
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3, 11, 4, 13, 5] as unknown as number,
+            'circle-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.55, 13, 0.85] as unknown as number,
+            'circle-stroke-width': 1,
+            'circle-stroke-color': '#fff',
+          }}
+        />
+      </Source>
 
-      {/* Shelter markers */}
-      {shelters.map((shelter) => {
+      {/* ── Full HTML Markers (zoom >= ZOOM_DOTS, or always for highlighted) ── */}
+      {markersToRender.map((shelter) => {
         const isHighlighted = shelter.id === highlightedShelterId
         return (
           <Marker
@@ -251,6 +353,19 @@ function MapInner({
           </Marker>
         )
       })}
+
+      {/* User location dot */}
+      {userLocation && (
+        <Marker longitude={userLocation[1]} latitude={userLocation[0]} anchor="center">
+          <div style={{
+            width: 16, height: 16,
+            background: '#4285f4',
+            border: '2.5px solid white',
+            borderRadius: '50%',
+            boxShadow: '0 0 0 5px rgba(66,133,244,0.2)',
+          }} />
+        </Marker>
+      )}
 
       {/* Zoom + recenter controls */}
       <div style={{
@@ -301,7 +416,6 @@ function MapInner({
               <div style={{ width: 0, height: 0, borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: '10px solid #1c1c1c', marginTop: -1 }} />
             </div>
           </Marker>
-          {/* Confirm bubble */}
           <Marker longitude={dropPin.lng} latitude={dropPin.lat} anchor="top" offset={[0, 10]}>
             <div style={{
               background: 'white', borderRadius: 16, padding: '10px 14px',
@@ -311,17 +425,11 @@ function MapInner({
               <p style={{ fontSize: 13, fontWeight: 600, color: '#111', margin: 0 }}>הוסף מקלט כאן?</p>
               <div style={{ display: 'flex', gap: 8, width: '100%' }}>
                 <button
-                  style={{
-                    flex: 1, height: 34, borderRadius: 10, background: '#1c1c1c', color: 'white',
-                    border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  }}
+                  style={{ flex: 1, height: 34, borderRadius: 10, background: '#1c1c1c', color: 'white', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
                   onClick={() => { onLongPress?.(dropPin.lat, dropPin.lng); setDropPin(null) }}
                 >המשך</button>
                 <button
-                  style={{
-                    flex: 1, height: 34, borderRadius: 10, background: '#f4f4f4', color: '#555',
-                    border: 'none', fontSize: 13, cursor: 'pointer',
-                  }}
+                  style={{ flex: 1, height: 34, borderRadius: 10, background: '#f4f4f4', color: '#555', border: 'none', fontSize: 13, cursor: 'pointer' }}
                   onClick={() => setDropPin(null)}
                 >ביטול</button>
               </div>
