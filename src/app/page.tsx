@@ -255,7 +255,7 @@ export default function Home() {
         const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
         // Build URL manually — URLSearchParams encodes commas which Mapbox rejects
         let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`
-        url += `?country=il&language=he,en&types=address,place,neighborhood,locality,poi,region&limit=6`
+        url += `?country=il&language=he,en&types=address,place,neighborhood,locality,poi,region&limit=6&autocomplete=true`
         url += `&access_token=${token}`
         // Bias results toward the user's current location when available
         if (userLocation) {

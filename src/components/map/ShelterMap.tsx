@@ -164,20 +164,22 @@ function MapInner({
     let startY = 0
 
     const onTouchStart = (e: { lngLat: { lat: number; lng: number }; originalEvent: TouchEvent }) => {
+      // Ignore multi-touch (pinch to zoom) — only single finger qualifies
+      if (e.originalEvent.touches.length > 1) return
       const touch = e.originalEvent.touches[0]
       startX = touch.clientX
       startY = touch.clientY
       const { lat, lng } = e.lngLat
-      // 700ms threshold — long enough to not trigger on normal taps or scrolls
       timer = setTimeout(() => setDropPin({ lat, lng }), 700)
     }
 
     const onTouchMove = (e: { originalEvent: TouchEvent }) => {
+      if (!e.originalEvent.touches[0]) return
       const touch = e.originalEvent.touches[0]
       const dx = touch.clientX - startX
       const dy = touch.clientY - startY
-      // Cancel if finger moved more than 10px — user is panning, not long-pressing
-      if (Math.sqrt(dx * dx + dy * dy) > 10) clearTimeout(timer)
+      // 20px threshold — enough to absorb finger tremor but still cancel real panning
+      if (Math.sqrt(dx * dx + dy * dy) > 20) clearTimeout(timer)
     }
 
     const cancel = () => clearTimeout(timer)
@@ -191,6 +193,7 @@ function MapInner({
     map.on('touchstart',  onTouchStart)
     map.on('touchend',    cancel)
     map.on('touchmove',   onTouchMove)
+    map.on('movestart',   cancel)   // map started panning/zooming — cancel immediately
     map.on('contextmenu', onContext)
 
     return () => {
@@ -198,6 +201,7 @@ function MapInner({
       map.off('touchstart',   onTouchStart)
       map.off('touchend',     cancel)
       map.off('touchmove',    onTouchMove)
+      map.off('movestart',    cancel)
       map.off('contextmenu',  onContext)
     }
   }, [map, onLongPress])
