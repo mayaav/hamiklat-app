@@ -340,11 +340,11 @@ export default function Home() {
         />
       </div>
 
-      {/* FAB — add shelter, bottom center above carousel */}
+      {/* FAB — add shelter, bottom left above carousel */}
       {!selectedShelterId && !showSearch && (
         <button
           onClick={() => router.push('/add')}
-          className="absolute left-1/2 -translate-x-1/2 z-[999] flex items-center gap-2 px-5 h-12 rounded-full text-sm font-bold shadow-lg active:scale-95 transition-transform"
+          className="absolute left-4 z-[999] flex items-center gap-2 px-5 h-12 rounded-full text-sm font-bold shadow-lg active:scale-95 transition-transform"
           style={{ bottom: 216, background: '#eab308', color: '#111' }}
         >
           <span className="text-lg leading-none">+</span>
@@ -352,12 +352,11 @@ export default function Home() {
         </button>
       )}
 
-      {/* Info button — bottom left, above carousel */}
+      {/* Info button — top left, below search bar */}
       <button
         onClick={() => router.push('/about')}
-        className="absolute bottom-[calc(var(--carousel-h,200px)+12px)] left-4 z-[999] w-8 h-8 rounded-full bg-white/90 backdrop-blur shadow-md flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors text-sm font-medium"
+        className="absolute top-[104px] left-4 z-[999] w-8 h-8 rounded-full bg-white/90 backdrop-blur shadow-md flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors text-sm font-medium"
         aria-label="אודות המפה"
-        style={{ bottom: 'calc(172px + 12px)' }}
       >
         ℹ
       </button>
