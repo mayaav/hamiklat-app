@@ -322,7 +322,7 @@ export default function Home() {
           carouselOffsetPx={200}
           onShelterClick={handleMapPinClick}
           onBoundsChange={handleBoundsChange}
-          onRecenter={userLocation ? () => flyTo(userLocation) : undefined}
+          onRecenter={userLocation ? requestLocation : undefined}
           onLongPress={handleLongPress}
         />
       </div>
