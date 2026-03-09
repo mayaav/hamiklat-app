@@ -345,7 +345,7 @@ export default function Home() {
         <button
           onClick={() => router.push('/add')}
           className="absolute left-4 z-[999] flex items-center gap-2 px-5 h-12 rounded-full text-sm font-bold shadow-lg active:scale-95 transition-transform"
-          style={{ bottom: 216, background: '#eab308', color: '#111' }}
+          style={{ bottom: 'calc(min(148px, 28dvh) + max(1.5rem, env(safe-area-inset-bottom)) + 16px)', background: '#eab308', color: '#111' }}
         >
           <span className="text-lg leading-none">+</span>
           <span>הוסף מקלט</span>
