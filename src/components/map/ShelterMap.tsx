@@ -120,6 +120,15 @@ function MapInner({
   const { current: map } = useMap()
   const prevSeq = useRef(-1)
   const [dropPin, setDropPin] = useState<{ lat: number; lng: number } | null>(null)
+  const [mapReady, setMapReady] = useState(false)
+
+  useEffect(() => {
+    if (!map) return
+    if (map.isStyleLoaded()) { setMapReady(true); return }
+    const onLoad = () => setMapReady(true)
+    map.once('load', onLoad)
+    return () => { map.off('load', onLoad) }
+  }, [map])
 
   // Fly to target when seq changes
   useEffect(() => {
@@ -205,6 +214,8 @@ function MapInner({
       map.off('contextmenu',  onContext)
     }
   }, [map, onLongPress])
+
+  if (!mapReady) return null
 
   return (
     <>
