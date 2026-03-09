@@ -12,8 +12,8 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   icons: {
-    icon: '/favicon.svg',
-    apple: '/favicon.svg',
+    icon: '/shield.png',
+    apple: '/shield.png',
   },
   title: 'המקלט | מצא מקלט קרוב',
   description: 'מפת מקלטים קהילתית לישראל — מצא את המקלט הקרוב אליך במהירות. מקלטים ציבוריים, ממ"דים ומרחבים מוגנים על המפה.',
