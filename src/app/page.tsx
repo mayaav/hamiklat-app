@@ -340,6 +340,18 @@ export default function Home() {
         />
       </div>
 
+      {/* FAB — add shelter, bottom center above carousel */}
+      {!selectedShelterId && !showSearch && (
+        <button
+          onClick={() => router.push('/add')}
+          className="absolute left-1/2 -translate-x-1/2 z-[999] flex items-center gap-2 px-5 h-12 rounded-full text-sm font-bold shadow-lg active:scale-95 transition-transform"
+          style={{ bottom: 216, background: '#eab308', color: '#111' }}
+        >
+          <span className="text-lg leading-none">+</span>
+          <span>הוסף מקלט</span>
+        </button>
+      )}
+
       {/* Info button — bottom left, above carousel */}
       <button
         onClick={() => router.push('/about')}
@@ -408,20 +420,12 @@ export default function Home() {
               </button>
             )}
           </div>
-          {showSearch ? (
+          {showSearch && (
             <button
               className="text-sm text-muted-foreground bg-white/95 backdrop-blur shadow-md rounded-2xl h-11 px-4 shrink-0"
               onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]) }}
             >
               ביטול
-            </button>
-          ) : (
-            <button
-              className="shrink-0 bg-gray-900 text-white shadow-md rounded-2xl h-11 px-4 text-sm font-semibold flex items-center gap-1.5"
-              onClick={() => router.push('/add')}
-            >
-              <span className="text-base leading-none">+</span>
-              <span>הוסף</span>
             </button>
           )}
         </div>
