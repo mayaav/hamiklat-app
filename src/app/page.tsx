@@ -92,7 +92,8 @@ export default function Home() {
   const [proximityPOIs, setProximityPOIs] = useState<{ coffee: [number, number][]; pharmacy: [number, number][] }>({ coffee: [], pharmacy: [] })
   const poiFetchedFor = useRef<{ coffee: string; pharmacy: string }>({ coffee: '', pharmacy: '' })
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<{ place_name: string; center: [number, number] }[]>([])
+  const [searchResults, setSearchResults] = useState<{ place_name: string; center: [number, number]; mapbox_id?: string }[]>([])
+  const searchSessionToken = useRef(crypto.randomUUID())
   const [showSearch, setShowSearch] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -253,17 +254,23 @@ export default function Home() {
     searchTimer.current = setTimeout(async () => {
       try {
         const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
-        // Build URL manually — URLSearchParams encodes commas which Mapbox rejects
-        let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json`
-        url += `?country=il&language=he,en&types=address,place,neighborhood,locality,poi,region&limit=6&autocomplete=true`
+        // Mapbox Search Box API v1 — better Hebrew autocomplete than geocoding v5
+        let url = `https://api.mapbox.com/search/searchbox/v1/suggest?q=${encodeURIComponent(q)}`
+        url += `&country=il&language=he,en&limit=6`
+        url += `&session_token=${searchSessionToken.current}`
         url += `&access_token=${token}`
-        // Bias results toward the user's current location when available
         if (userLocation) {
           url += `&proximity=${userLocation[1]},${userLocation[0]}`
         }
         const res = await fetch(url)
         const data = await res.json()
-        setSearchResults(data.features ?? [])
+        // Search Box returns suggestions — retrieve coords for each
+        const suggestions = (data.suggestions ?? []) as { name: string; place_formatted?: string; mapbox_id: string }[]
+        setSearchResults(suggestions.map(s => ({
+          place_name: [s.name, s.place_formatted].filter(Boolean).join(', '),
+          center: [0, 0] as [number, number], // filled on click via retrieve
+          mapbox_id: s.mapbox_id,
+        })))
       } catch { /* silent */ }
     }, 350)
   }, [userLocation])
@@ -365,8 +372,20 @@ export default function Home() {
                             setSearchResults([])
                             setShowSearch(false)
                             setSearchQuery('')
-                            // Mapbox center is [lng, lat]
-                            const coords: [number, number] = [r.center[1], r.center[0]]
+                            let coords: [number, number]
+                            if (r.mapbox_id) {
+                              // Search Box API: retrieve full feature to get coordinates
+                              const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+                              const rv = await fetch(
+                                `https://api.mapbox.com/search/searchbox/v1/retrieve/${r.mapbox_id}?session_token=${searchSessionToken.current}&access_token=${token}`
+                              )
+                              const rd = await rv.json()
+                              const [lng, lat] = rd.features?.[0]?.geometry?.coordinates ?? [0, 0]
+                              coords = [lat, lng]
+                            } else {
+                              // Fallback: geocoding v5 result
+                              coords = [r.center[1], r.center[0]]
+                            }
                             userPickedLocation.current = true
                             setUserLocation(coords)
                             setGeoState('ready')
